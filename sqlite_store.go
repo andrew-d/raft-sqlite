@@ -10,8 +10,6 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const dbFileMode = 0600
-
 var (
 	// ErrKeyNotFound indicates a given key does not exist.
 	ErrKeyNotFound = errors.New("not found")
