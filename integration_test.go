@@ -54,6 +54,7 @@ func assertEqualErr(t *testing.T, label string, sqliteErr, boltErr error) {
 }
 
 func TestIntegration_FirstIndex_Empty(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	sIdx, sErr := p.sqlite.FirstIndex()
@@ -65,6 +66,7 @@ func TestIntegration_FirstIndex_Empty(t *testing.T) {
 }
 
 func TestIntegration_LastIndex_Empty(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	sIdx, sErr := p.sqlite.LastIndex()
@@ -76,6 +78,7 @@ func TestIntegration_LastIndex_Empty(t *testing.T) {
 }
 
 func TestIntegration_GetLog_NotFound(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	sErr := p.sqlite.GetLog(1, new(raft.Log))
@@ -86,6 +89,7 @@ func TestIntegration_GetLog_NotFound(t *testing.T) {
 }
 
 func TestIntegration_StoreAndGetLogs(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	logs := []*raft.Log{
@@ -135,6 +139,7 @@ func TestIntegration_StoreAndGetLogs(t *testing.T) {
 }
 
 func TestIntegration_StoreLog_Single(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	log := &raft.Log{Index: 1, Term: 1, Type: raft.LogCommand, Data: []byte("cmd")}
@@ -154,6 +159,7 @@ func TestIntegration_StoreLog_Single(t *testing.T) {
 }
 
 func TestIntegration_DeleteRange(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	logs := []*raft.Log{
@@ -195,6 +201,7 @@ func TestIntegration_DeleteRange(t *testing.T) {
 }
 
 func TestIntegration_DeleteRange_Empty(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	sErr := p.sqlite.DeleteRange(1, 100)
@@ -203,6 +210,7 @@ func TestIntegration_DeleteRange_Empty(t *testing.T) {
 }
 
 func TestIntegration_DeleteRange_All(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	logs := []*raft.Log{
@@ -229,6 +237,7 @@ func TestIntegration_DeleteRange_All(t *testing.T) {
 }
 
 func TestIntegration_Set_Get(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	// Both should error on missing key
@@ -253,6 +262,7 @@ func TestIntegration_Set_Get(t *testing.T) {
 }
 
 func TestIntegration_Set_Overwrite(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	k := []byte("key")
@@ -269,6 +279,7 @@ func TestIntegration_Set_Overwrite(t *testing.T) {
 }
 
 func TestIntegration_SetUint64_GetUint64(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	// Both should error on missing key
@@ -292,6 +303,7 @@ func TestIntegration_SetUint64_GetUint64(t *testing.T) {
 }
 
 func TestIntegration_SetUint64_Overwrite(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	k := []byte("counter")
@@ -308,6 +320,7 @@ func TestIntegration_SetUint64_Overwrite(t *testing.T) {
 }
 
 func TestIntegration_LogCompaction(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	// Write 100 logs
@@ -367,6 +380,7 @@ func TestIntegration_LogCompaction(t *testing.T) {
 }
 
 func TestIntegration_MixedOperations(t *testing.T) {
+	t.Parallel()
 	p := newStorePair(t)
 
 	// Interleave log and kv operations like real raft usage

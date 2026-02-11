@@ -31,6 +31,7 @@ func testRaftLog(idx uint64, data string) *raft.Log {
 }
 
 func TestSQLiteStore_Implements(t *testing.T) {
+	t.Parallel()
 	var store interface{} = &SQLiteStore{}
 	if _, ok := store.(raft.StableStore); !ok {
 		t.Fatalf("SQLiteStore does not implement raft.StableStore")
@@ -41,6 +42,7 @@ func TestSQLiteStore_Implements(t *testing.T) {
 }
 
 func TestNewSQLiteStore(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "raft.db")
 
@@ -60,6 +62,7 @@ func TestNewSQLiteStore(t *testing.T) {
 }
 
 func TestSQLiteStore_FirstIndex(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	// Should get 0 index on empty log
@@ -92,6 +95,7 @@ func TestSQLiteStore_FirstIndex(t *testing.T) {
 }
 
 func TestSQLiteStore_LastIndex(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	// Should get 0 index on empty log
@@ -124,6 +128,7 @@ func TestSQLiteStore_LastIndex(t *testing.T) {
 }
 
 func TestSQLiteStore_GetLog(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	log := new(raft.Log)
@@ -153,6 +158,7 @@ func TestSQLiteStore_GetLog(t *testing.T) {
 }
 
 func TestSQLiteStore_StoreLog(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	// Create the log
@@ -179,6 +185,7 @@ func TestSQLiteStore_StoreLog(t *testing.T) {
 }
 
 func TestSQLiteStore_StoreLogs(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	// Create a set of logs
@@ -209,6 +216,7 @@ func TestSQLiteStore_StoreLogs(t *testing.T) {
 }
 
 func TestSQLiteStore_DeleteRange(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	// Create a set of logs
@@ -238,6 +246,7 @@ func TestSQLiteStore_DeleteRange(t *testing.T) {
 }
 
 func TestSQLiteStore_Set_Get(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	// Returns error on non-existent key
@@ -263,6 +272,7 @@ func TestSQLiteStore_Set_Get(t *testing.T) {
 }
 
 func TestSQLiteStore_SetUint64_GetUint64(t *testing.T) {
+	t.Parallel()
 	store := testSQLiteStore(t)
 
 	// Returns error on non-existent key
