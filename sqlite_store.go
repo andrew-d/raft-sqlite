@@ -18,6 +18,18 @@ var (
 	ErrKeyNotFound = errors.New("not found")
 )
 
+// SQL queries used by the store. These are stored as constants so that tests
+// can verify query plans against the exact queries used in production.
+const (
+	queryFirstIndex  = "SELECT MIN(idx) FROM logs"
+	queryLastIndex   = "SELECT MAX(idx) FROM logs"
+	queryGetLog      = "SELECT idx, term, type, data, extensions, appended_at FROM logs WHERE idx = ?"
+	queryStoreLogs   = "INSERT OR REPLACE INTO logs (idx, term, type, data, extensions, appended_at) VALUES (?, ?, ?, ?, ?, ?)"
+	queryDeleteRange = "DELETE FROM logs WHERE idx >= ? AND idx <= ?"
+	querySet         = "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)"
+	queryGet         = "SELECT value FROM kv WHERE key = ?"
+)
+
 // SQLiteStore provides access to a SQLite database for Raft to store and
 // retrieve log entries. It also provides key/value storage, and can be used
 // as a LogStore and StableStore.
@@ -208,7 +220,7 @@ func (s *SQLiteStore) FirstIndex() (uint64, error) {
 	defer tx.Rollback()
 
 	var idx sql.NullInt64
-	if err := tx.QueryRow("SELECT MIN(idx) FROM logs").Scan(&idx); err != nil {
+	if err := tx.QueryRow(queryFirstIndex).Scan(&idx); err != nil {
 		return 0, err
 	}
 	if !idx.Valid {
@@ -226,7 +238,7 @@ func (s *SQLiteStore) LastIndex() (uint64, error) {
 	defer tx.Rollback()
 
 	var idx sql.NullInt64
-	if err := tx.QueryRow("SELECT MAX(idx) FROM logs").Scan(&idx); err != nil {
+	if err := tx.QueryRow(queryLastIndex).Scan(&idx); err != nil {
 		return 0, err
 	}
 	if !idx.Valid {
@@ -244,10 +256,9 @@ func (s *SQLiteStore) GetLog(index uint64, log *raft.Log) error {
 	defer tx.Rollback()
 
 	var appendedAtNanos int64
-	err = tx.QueryRow(
-		"SELECT idx, term, type, data, extensions, appended_at FROM logs WHERE idx = ?",
-		index,
-	).Scan(&log.Index, &log.Term, &log.Type, &log.Data, &log.Extensions, &appendedAtNanos)
+	err = tx.QueryRow(queryGetLog, index).Scan(
+		&log.Index, &log.Term, &log.Type, &log.Data, &log.Extensions, &appendedAtNanos,
+	)
 	if err == sql.ErrNoRows {
 		return raft.ErrLogNotFound
 	}
@@ -279,9 +290,7 @@ func (s *SQLiteStore) StoreLogs(logs []*raft.Log) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(
-		"INSERT OR REPLACE INTO logs (idx, term, type, data, extensions, appended_at) VALUES (?, ?, ?, ?, ?, ?)",
-	)
+	stmt, err := tx.Prepare(queryStoreLogs)
 	if err != nil {
 		return err
 	}
@@ -316,7 +325,7 @@ func (s *SQLiteStore) DeleteRange(min, max uint64) error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec("DELETE FROM logs WHERE idx >= ? AND idx <= ?", min, max); err != nil {
+	if _, err := tx.Exec(queryDeleteRange, min, max); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -330,10 +339,7 @@ func (s *SQLiteStore) Set(key []byte, val []byte) error {
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.Exec(
-		"INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
-		string(key), val,
-	); err != nil {
+	if _, err := tx.Exec(querySet, string(key), val); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -348,7 +354,7 @@ func (s *SQLiteStore) Get(key []byte) ([]byte, error) {
 	defer tx.Rollback()
 
 	var val []byte
-	err = tx.QueryRow("SELECT value FROM kv WHERE key = ?", string(key)).Scan(&val)
+	err = tx.QueryRow(queryGet, string(key)).Scan(&val)
 	if err == sql.ErrNoRows {
 		return nil, ErrKeyNotFound
 	}
