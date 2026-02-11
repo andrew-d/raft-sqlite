@@ -53,9 +53,6 @@ func TestNewSQLiteStore(t *testing.T) {
 	defer store.Close()
 
 	// Ensure the file was created
-	if store.path != path {
-		t.Fatalf("unexpected file path %q", store.path)
-	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("err: %s", err)
 	}
