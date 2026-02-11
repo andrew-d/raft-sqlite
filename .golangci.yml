@@ -1,12 +1,12 @@
+version: "2"
 linters:
   # Disable all linters by default
-  disable-all: true
+  default: none
 
   # Enable specific linters
   enable:
     # default
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
@@ -35,90 +35,108 @@ linters:
 
     # TODO: more?
 
-linters-settings:
-  errcheck:
-    exclude-functions:
-      - (*database/sql.Tx).Rollback
-      - (*github.com/andrew-d/mastodon-auto-admin/internal/db.Tx).Rollback
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*database/sql.Tx).Rollback
+        - (*github.com/andrew-d/mastodon-auto-admin/internal/db.Tx).Rollback
 
-  godox:
-    keywords:
-      - FIXME
-      - HACK
-      - hack
-      # Common strings that LLMs add instead of actually writing the
-      # test/code/function/etc.
-      - placeholder
-      - actual implementation
-      - mock implementation
-      - fake implementation
-      - dummy
-      - kludge
-      - interim solution
-      - quick fix
-      - in the future
-      - for now
-      - simulate
-      - workaround
+    godox:
+      keywords:
+        - FIXME
+        - HACK
+        - hack
+        # Common strings that LLMs add instead of actually writing the
+        # test/code/function/etc.
+        - placeholder
+        - actual implementation
+        - mock implementation
+        - fake implementation
+        - dummy
+        - kludge
+        - interim solution
+        - quick fix
+        - in the future
+        - for now
+        - simulate
+        - workaround
 
-  grouper:
-    import-require-single-import: true
-    import-require-grouping: true
+    grouper:
+      import-require-single-import: true
+      import-require-grouping: true
 
-  loggercheck:
-    kitlog: false
-    klog: false
-    logr: false
-    zap: false
+    loggercheck:
+      kitlog: false
+      klog: false
+      logr: false
+      zap: false
 
-    slog: true
+      slog: true
 
-    # Require printf-like format specifier (%s, %d for example) not present.
-    no-printf-like: true
+      # Require printf-like format specifier (%s, %d for example) not present.
+      no-printf-like: true
 
-  nolintlint:
-    require-explanation: true
-    require-specific: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
 
-  # TODO: sloglint config
+    # TODO: sloglint config
 
-  depguard:
+    depguard:
+      rules:
+        logger:
+          deny:
+            - pkg: github.com/rs/zerolog
+              desc: Use log/slog instead of zerolog
+            - pkg: github.com/sirupsen/logrus
+              desc: Use log/slog instead of logrus
+            - pkg: go.uber.org/zap
+              desc: Use log/slog instead of zap
+        mathrand:
+          deny:
+            - pkg: math/rand$
+              desc: use math/rand/v2
+        testing:
+          deny:
+            - pkg: github.com/stretchr/testify
+              desc: Use regular if statements, reflect, or a custom assertion instead
+        deprecated:
+          deny:
+            - pkg: github.com/pkg/errors
+              desc: Should be replaced by standard library errors package
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      logger:
-        deny:
-          - pkg: "github.com/rs/zerolog"
-            desc: Use log/slog instead of zerolog
-          - pkg: "github.com/sirupsen/logrus"
-            desc: Use log/slog instead of logrus
-          - pkg: "go.uber.org/zap"
-            desc: Use log/slog instead of zap
-      mathrand:
-        deny:
-          - pkg: "math/rand$"
-            desc: use math/rand/v2
-      testing:
-        deny:
-          - pkg: "github.com/stretchr/testify"
-            desc: Use regular if statements, reflect, or a custom assertion instead
-      deprecated:
-        deny:
-          - pkg: "github.com/pkg/errors"
-            desc: Should be replaced by standard library errors package
+      # Ignore the tmp/ directory for all linters; use a YAML anchor to ensure
+      # that we get everything.
+      - path: ^(tmp|scratch)/
+        text: ".*"
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - lll
+          - errcheck
+          - gosec
+          - wrapcheck
+      # The main package can use fmt.Printf
+      - path: ^cmd/mastomod/
+        linters:
+          - forbidigo
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 
-issues:
-  exclude-rules:
-    # Ignore the tmp/ directory for all linters; use a YAML anchor to ensure
-    # that we get everything.
-    - path: ^(tmp|scratch)/
-      text: ".*"
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - lll
-        - errcheck
-        - gosec
-        - wrapcheck
-    # The main package can use fmt.Printf
-    - path: ^cmd/mastomod/
-      linters:
-        - forbidigo
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
