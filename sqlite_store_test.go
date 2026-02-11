@@ -15,7 +15,7 @@ func testSQLiteStore(t testing.TB) *SQLiteStore {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "raft.db")
 
-	store, err := NewSQLiteStore(path)
+	store, err := New(Options{Path: path, Logf: t.Logf})
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -44,7 +44,7 @@ func TestNewSQLiteStore(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "raft.db")
 
-	store, err := NewSQLiteStore(path)
+	store, err := New(Options{Path: path, Logf: t.Logf})
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}

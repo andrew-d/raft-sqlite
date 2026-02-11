@@ -1,9 +1,12 @@
 package raftsqlite
 
 import (
+	"context"
 	"database/sql"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -21,6 +24,11 @@ var (
 type SQLiteStore struct {
 	db   *sql.DB
 	path string
+	logf func(string, ...any)
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // Options contains all the configuration used to open the SQLite store.
@@ -32,6 +40,10 @@ type Options struct {
 	// write to the log. This is unsafe, so it should be used
 	// with caution.
 	NoSync bool
+
+	// Logf is an optional log function for diagnostic messages.
+	// If nil, log messages are discarded.
+	Logf func(string, ...any)
 }
 
 // New uses the supplied options to open the SQLite database and prepare it
@@ -42,28 +54,56 @@ func New(options Options) (*SQLiteStore, error) {
 		return nil, err
 	}
 
-	// Enable WAL mode for better concurrent performance.
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
-		return nil, err
+	pragmas := []string{
+		// busy_timeout tells SQLite to wait for 10 seconds if the
+		// database is locked before giving up.
+		"PRAGMA busy_timeout=10000;",
+		// auto_vacuum=INCREMENTAL allows incremental VACUUMs to be
+		// triggered using PRAGMA incremental_vacuum.
+		//
+		// NOTE: this must be set before any tables are created or
+		// journal_mode is set.
+		"PRAGMA auto_vacuum=INCREMENTAL;",
+		// journal_mode=WAL enables write-ahead logging.
+		"PRAGMA journal_mode=WAL;",
 	}
 
 	if options.NoSync {
-		if _, err := db.Exec("PRAGMA synchronous=OFF"); err != nil {
+		// synchronous=OFF tells SQLite to skip fsync calls after each write.
+		pragmas = append(pragmas, "PRAGMA synchronous=OFF;")
+	} else {
+		// synchronous=FULL is the default, but we set it explicitly here to ensure
+		// that we have full ACID consistency.
+		pragmas = append(pragmas, "PRAGMA synchronous=FULL;")
+	}
+
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
 			db.Close()
-			return nil, err
+			return nil, fmt.Errorf("failed to set pragma %q: %w", pragma, err)
 		}
 	}
 
+	logf := options.Logf
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	store := &SQLiteStore{
-		db:   db,
-		path: options.Path,
+		db:     db,
+		path:   options.Path,
+		logf:   logf,
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
 	if err := store.initialize(); err != nil {
 		db.Close()
 		return nil, err
 	}
+
+	store.wg.Go(store.vacuumLoop)
 
 	return store, nil
 }
@@ -77,16 +117,16 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 func (s *SQLiteStore) initialize() error {
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS logs (
-			idx INTEGER PRIMARY KEY,
-			term INTEGER NOT NULL,
-			type INTEGER NOT NULL,
-			data BLOB NOT NULL,
-			extensions BLOB NOT NULL,
-			appended_at INTEGER NOT NULL
+			idx		INTEGER PRIMARY KEY,
+			term		INTEGER NOT NULL,
+			type		INTEGER NOT NULL,
+			data		BLOB NOT NULL,
+			extensions	BLOB NOT NULL,
+			appended_at	INTEGER NOT NULL
 		) STRICT;
 		CREATE TABLE IF NOT EXISTS kv (
-			key TEXT PRIMARY KEY,
-			value BLOB NOT NULL
+			key	TEXT PRIMARY KEY,
+			value	BLOB NOT NULL
 		) STRICT;
 	`)
 	return err
@@ -94,7 +134,25 @@ func (s *SQLiteStore) initialize() error {
 
 // Close is used to gracefully close the DB connection.
 func (s *SQLiteStore) Close() error {
+	s.cancel()
+	s.wg.Wait()
 	return s.db.Close()
+}
+
+// vacuumLoop periodically runs an incremental vacuum.
+func (s *SQLiteStore) vacuumLoop() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := s.db.Exec("PRAGMA incremental_vacuum"); err != nil {
+				s.logf("incremental vacuum failed: %v", err)
+			}
+		}
+	}
 }
 
 // FirstIndex returns the first known index from the Raft log.

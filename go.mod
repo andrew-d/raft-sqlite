@@ -1,6 +1,6 @@
 module github.com/andrew-d/raft-sqlite
 
-go 1.24.0
+go 1.26.0
 
 require (
 	github.com/hashicorp/raft v1.7.3

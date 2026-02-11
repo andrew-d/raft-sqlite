@@ -27,7 +27,7 @@ func newStorePair(t testing.TB) storePair {
 	t.Helper()
 	dir := t.TempDir()
 
-	sqliteStore, err := NewSQLiteStore(filepath.Join(dir, "sqlite.db"))
+	sqliteStore, err := New(Options{Path: filepath.Join(dir, "sqlite.db"), Logf: t.Logf})
 	if err != nil {
 		t.Fatalf("creating sqlite store: %s", err)
 	}
