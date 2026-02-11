@@ -1,0 +1,7 @@
+# This directory is intentionally left empty and ignores everything except the
+# .gitignore file.
+#
+# This can be used for temporary files.
+
+*
+!.gitignore

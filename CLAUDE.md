@@ -15,3 +15,7 @@ This is a Go library that implements `raft.LogStore` and `raft.StableStore` from
 - Tests use `t.TempDir()` and `t.Cleanup()` for automatic resource management — no manual `os.Remove` or `defer os.RemoveAll`
 - Integration tests instantiate both this store and the BoltDB store, run identical operations, and assert matching results
 - Use `go tool doc` to read interface documentation from dependencies rather than guessing
+
+## Miscellaneous
+
+- Use the `scratch/` directory in the repository root for any temporary files (log files, etc.) instead of the `/tmp` directory.
