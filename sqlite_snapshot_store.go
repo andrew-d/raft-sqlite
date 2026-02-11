@@ -18,12 +18,22 @@ import (
 )
 
 // SQL queries used by the snapshot store.
+//
+// The "WHERE term >= 0" clauses are tautological conditions (term is a uint64
+// stored as INTEGER, so always >= 0) that force SQLite to use an index SEARCH
+// (seek) on idx_snapshots_term_idx_id instead of a full table SCAN. Without a
+// WHERE clause, SQLite has no predicate to anchor the index seek, even when
+// the ORDER BY matches the index perfectly.
 const (
-	snapshotQueryList   = "SELECT id, version, term, idx, configuration, configuration_index, size, crc, created_at FROM snapshots ORDER BY term DESC, idx DESC, id DESC"
+	snapshotQueryList   = "SELECT id, version, term, idx, configuration, configuration_index, size, crc, created_at FROM snapshots WHERE term >= 0 ORDER BY term DESC, idx DESC, id DESC"
 	snapshotQueryOpen   = "SELECT id, version, term, idx, configuration, configuration_index, size, crc, data FROM snapshots WHERE id = ?"
 	snapshotQueryInsert = "INSERT INTO snapshots (id, version, term, idx, configuration, configuration_index, size, crc, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	snapshotQueryReap   = "DELETE FROM snapshots WHERE id NOT IN (SELECT id FROM snapshots ORDER BY term DESC, idx DESC, id DESC LIMIT ?)"
+	snapshotQueryReap   = "DELETE FROM snapshots WHERE id IN (SELECT id FROM snapshots WHERE term >= 0 ORDER BY term DESC, idx DESC, id DESC LIMIT -1 OFFSET ?)"
 )
+
+// This type assertion confirms that 'term' is in fact a uint64, so the >= 0
+// condition in the queries is valid.
+var _ uint64 = (raft.SnapshotMeta{}).Term
 
 // SnapshotStore is an implementation of [raft.SnapshotStore] that uses SQLite
 // as the backend.
@@ -169,6 +179,8 @@ func (s *SnapshotStore) initialize() error {
 			data                BLOB NOT NULL,
 			created_at          INTEGER NOT NULL
 		) STRICT;
+		CREATE INDEX IF NOT EXISTS idx_snapshots_term_idx_id
+			ON snapshots (term DESC, idx DESC, id DESC);
 	`)
 	if err != nil {
 		return err

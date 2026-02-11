@@ -17,7 +17,7 @@ func TestSnapshotQueryPlans(t *testing.T) {
 		{
 			name:  "List",
 			query: snapshotQueryList,
-			want:  []string{"SCAN snapshots", "USE TEMP B-TREE FOR ORDER BY"},
+			want:  []string{"SEARCH snapshots USING INDEX idx_snapshots_term_idx_id (term>?)"},
 		},
 		{
 			name:  "Open",
@@ -29,7 +29,7 @@ func TestSnapshotQueryPlans(t *testing.T) {
 			name:  "Reap",
 			query: snapshotQueryReap,
 			args:  []any{2},
-			want:  []string{"SCAN snapshots", "LIST SUBQUERY 1", "SCAN snapshots", "USE TEMP B-TREE FOR ORDER BY"},
+			want:  []string{"SEARCH snapshots USING COVERING INDEX sqlite_autoindex_snapshots_1 (id=?)", "LIST SUBQUERY 1", "SEARCH snapshots USING COVERING INDEX idx_snapshots_term_idx_id (term>?)", "CREATE BLOOM FILTER"},
 		},
 	}
 
