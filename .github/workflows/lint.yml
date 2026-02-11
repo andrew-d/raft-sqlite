@@ -18,4 +18,14 @@ jobs:
           go-version-file: 'go.mod'
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.6
+          # NOTE: we use goinstall to ensure that we're building with the same
+          # version of Go that we build the rest of the project with.
+          # Otherwise, if we upgrade versions of Go before the upstream action
+          # is updated, we get the error:
+          #     The command is terminated due to an error: can't load config:
+          #     the Go language version (go1.25) used to build golangci-lint is
+          #     lower than the targeted Go version (1.26.0)
+          install-mode: goinstall
+
+          # NOTE: make sure that this matches the version in go.mod
+          version: v2.9
