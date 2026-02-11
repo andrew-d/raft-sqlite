@@ -19,3 +19,4 @@ This is a Go library that implements `raft.LogStore` and `raft.StableStore` from
 ## Miscellaneous
 
 - Use the `scratch/` directory in the repository root for any temporary files (log files, etc.) instead of the `/tmp` directory.
+- `git add` and `git commit` in two separate tool calls
