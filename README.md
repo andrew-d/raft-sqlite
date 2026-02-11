@@ -19,7 +19,7 @@ For more control, use `raftsqlite.New` with `Options`:
 
 ```go
 store, err := raftsqlite.New(raftsqlite.Options{
-    Path:   "/path/to/raft.db",
-    NoSync: true, // unsafe, but faster
+	Path: "/path/to/raft.db",
+	Logf: log.Printf,
 })
 ```
