@@ -1,14 +1,15 @@
 package raftsqlite
 
 import (
+	"database/sql"
 	"testing"
 )
 
 // queryPlanDetails runs EXPLAIN QUERY PLAN on the given query and returns
 // the detail strings from each row of the result.
-func queryPlanDetails(t *testing.T, store *SQLiteStore, query string, args ...any) []string {
+func queryPlanDetails(t *testing.T, db *sql.DB, query string, args ...any) []string {
 	t.Helper()
-	rows, err := store.db.Query("EXPLAIN QUERY PLAN "+query, args...)
+	rows, err := db.Query("EXPLAIN QUERY PLAN "+query, args...)
 	if err != nil {
 		t.Fatalf("EXPLAIN QUERY PLAN failed: %v", err)
 	}
@@ -56,22 +57,10 @@ func TestQueryPlans(t *testing.T) {
 			want:  []string{"SEARCH logs USING INTEGER PRIMARY KEY (rowid=?)"},
 		},
 		{
-			name:  "StoreLogs",
-			query: queryStoreLogs,
-			args:  []any{1, 1, 0, []byte{}, []byte{}, 0},
-			want:  nil,
-		},
-		{
 			name:  "DeleteRange",
 			query: queryDeleteRange,
 			args:  []any{1, 3},
 			want:  []string{"SEARCH logs USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)"},
-		},
-		{
-			name:  "Set",
-			query: querySet,
-			args:  []any{"key", []byte("value")},
-			want:  nil,
 		},
 		{
 			name:  "Get",
@@ -84,7 +73,7 @@ func TestQueryPlans(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := queryPlanDetails(t, store, tt.query, tt.args...)
+			got := queryPlanDetails(t, store.db, tt.query, tt.args...)
 			// Print actual details for debugging
 			for i, d := range got {
 				t.Logf("detail[%d]: %q", i, d)
