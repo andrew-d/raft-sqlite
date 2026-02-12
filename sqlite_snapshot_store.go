@@ -10,11 +10,9 @@ import (
 	"hash"
 	"hash/crc64"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
-	_ "modernc.org/sqlite"
 )
 
 // SQL queries used by the snapshot store.
@@ -38,14 +36,8 @@ var _ uint64 = (raft.SnapshotMeta{}).Term
 // SnapshotStore is an implementation of [raft.SnapshotStore] that uses SQLite
 // as the backend.
 type SnapshotStore struct {
-	txFactory func(context.Context, *sql.TxOptions) (*sql.Tx, error)
-	db        *sql.DB // may be nil
-	logf      func(string, ...any)
-	retain    int
-
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	baseStore
+	retain int
 }
 
 // SnapshotStoreOptions contains all the configuration used to open the
@@ -95,11 +87,13 @@ func NewSnapshotStore(options SnapshotStoreOptions) (*SnapshotStore, error) {
 
 	if options.TxFactory != nil {
 		store := &SnapshotStore{
-			txFactory: options.TxFactory,
-			logf:      logf,
-			retain:    options.Retain,
-			ctx:       ctx,
-			cancel:    cancel,
+			baseStore: baseStore{
+				txFactory: options.TxFactory,
+				logf:      logf,
+				ctx:       ctx,
+				cancel:    cancel,
+			},
+			retain: options.Retain,
 		}
 		if err := store.initialize(); err != nil {
 			cancel()
@@ -108,33 +102,21 @@ func NewSnapshotStore(options SnapshotStoreOptions) (*SnapshotStore, error) {
 		return store, nil
 	}
 
-	db, err := sql.Open("sqlite", options.Path)
+	db, err := openDB(options.Path)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
-	pragmas := []string{
-		"PRAGMA busy_timeout=10000;",
-		"PRAGMA auto_vacuum=INCREMENTAL;",
-		"PRAGMA journal_mode=WAL;",
-		"PRAGMA synchronous=FULL;",
-	}
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			db.Close()
-			cancel()
-			return nil, fmt.Errorf("failed to set pragma %q: %w", pragma, err)
-		}
-	}
-
 	store := &SnapshotStore{
-		db:        db,
-		txFactory: db.BeginTx,
-		logf:      logf,
-		retain:    options.Retain,
-		ctx:       ctx,
-		cancel:    cancel,
+		baseStore: baseStore{
+			db:        db,
+			txFactory: db.BeginTx,
+			logf:      logf,
+			ctx:       ctx,
+			cancel:    cancel,
+		},
+		retain: options.Retain,
 	}
 
 	if err := store.initialize(); err != nil {
@@ -146,16 +128,6 @@ func NewSnapshotStore(options SnapshotStoreOptions) (*SnapshotStore, error) {
 	store.wg.Go(store.vacuumLoop)
 
 	return store, nil
-}
-
-// beginTx starts a new read-write transaction.
-func (s *SnapshotStore) beginTx() (*sql.Tx, error) {
-	return s.txFactory(s.ctx, nil)
-}
-
-// beginReadTx starts a new read-only transaction.
-func (s *SnapshotStore) beginReadTx() (*sql.Tx, error) {
-	return s.txFactory(s.ctx, &sql.TxOptions{ReadOnly: true})
 }
 
 // initialize creates the snapshots table if it doesn't already exist.
@@ -186,32 +158,6 @@ func (s *SnapshotStore) initialize() error {
 		return err
 	}
 	return tx.Commit()
-}
-
-// Close is used to gracefully close the snapshot store.
-func (s *SnapshotStore) Close() error {
-	s.cancel()
-	s.wg.Wait()
-	if s.db != nil {
-		return s.db.Close()
-	}
-	return nil
-}
-
-// vacuumLoop periodically runs an incremental vacuum.
-func (s *SnapshotStore) vacuumLoop() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		case <-ticker.C:
-			if _, err := s.db.Exec("PRAGMA incremental_vacuum"); err != nil {
-				s.logf("incremental vacuum failed: %v", err)
-			}
-		}
-	}
 }
 
 // Create is used to begin a snapshot at a given index and term, and with the
