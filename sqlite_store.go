@@ -5,12 +5,9 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"errors"
-	"fmt"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
-	_ "modernc.org/sqlite"
 )
 
 var (
@@ -34,13 +31,7 @@ const (
 // retrieve log entries. It also provides key/value storage, and can be used
 // as a LogStore and StableStore.
 type SQLiteStore struct {
-	txFactory func(context.Context, *sql.TxOptions) (*sql.Tx, error)
-	db        *sql.DB // may be nil
-	logf      func(string, ...any)
-
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	baseStore
 }
 
 // Options contains all the configuration used to open the SQLite store.
@@ -81,10 +72,12 @@ func New(options Options) (*SQLiteStore, error) {
 
 	if options.TxFactory != nil {
 		store := &SQLiteStore{
-			txFactory: options.TxFactory,
-			logf:      logf,
-			ctx:       ctx,
-			cancel:    cancel,
+			baseStore: baseStore{
+				txFactory: options.TxFactory,
+				logf:      logf,
+				ctx:       ctx,
+				cancel:    cancel,
+			},
 		}
 		if err := store.initialize(); err != nil {
 			cancel()
@@ -93,42 +86,20 @@ func New(options Options) (*SQLiteStore, error) {
 		return store, nil
 	}
 
-	db, err := sql.Open("sqlite", options.Path)
+	db, err := openDB(options.Path)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
-	pragmas := []string{
-		// busy_timeout tells SQLite to wait for 10 seconds if the
-		// database is locked before giving up.
-		"PRAGMA busy_timeout=10000;",
-		// auto_vacuum=INCREMENTAL allows incremental VACUUMs to be
-		// triggered using PRAGMA incremental_vacuum.
-		//
-		// NOTE: this must be set before any tables are created or
-		// journal_mode is set.
-		"PRAGMA auto_vacuum=INCREMENTAL;",
-		// journal_mode=WAL enables write-ahead logging.
-		"PRAGMA journal_mode=WAL;",
-		// synchronous=FULL is the default, but we set it explicitly here to ensure
-		// that we have full ACID consistency.
-		"PRAGMA synchronous=FULL;",
-	}
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			db.Close()
-			cancel()
-			return nil, fmt.Errorf("failed to set pragma %q: %w", pragma, err)
-		}
-	}
-
 	store := &SQLiteStore{
-		db:        db,
-		txFactory: db.BeginTx,
-		logf:      logf,
-		ctx:       ctx,
-		cancel:    cancel,
+		baseStore: baseStore{
+			db:        db,
+			txFactory: db.BeginTx,
+			logf:      logf,
+			ctx:       ctx,
+			cancel:    cancel,
+		},
 	}
 
 	if err := store.initialize(); err != nil {
@@ -145,16 +116,6 @@ func New(options Options) (*SQLiteStore, error) {
 // NewSQLiteStore takes a file path and returns a connected Raft backend.
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	return New(Options{Path: path})
-}
-
-// beginTx starts a new read-write transaction.
-func (s *SQLiteStore) beginTx() (*sql.Tx, error) {
-	return s.txFactory(s.ctx, nil)
-}
-
-// beginReadTx starts a new read-only transaction.
-func (s *SQLiteStore) beginReadTx() (*sql.Tx, error) {
-	return s.txFactory(s.ctx, &sql.TxOptions{ReadOnly: true})
 }
 
 // initialize creates the tables if they don't already exist.
@@ -183,32 +144,6 @@ func (s *SQLiteStore) initialize() error {
 		return err
 	}
 	return tx.Commit()
-}
-
-// Close is used to gracefully close the DB connection.
-func (s *SQLiteStore) Close() error {
-	s.cancel()
-	s.wg.Wait()
-	if s.db != nil {
-		return s.db.Close()
-	}
-	return nil
-}
-
-// vacuumLoop periodically runs an incremental vacuum.
-func (s *SQLiteStore) vacuumLoop() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-s.ctx.Done():
-			return
-		case <-ticker.C:
-			if _, err := s.db.Exec("PRAGMA incremental_vacuum"); err != nil {
-				s.logf("incremental vacuum failed: %v", err)
-			}
-		}
-	}
 }
 
 // FirstIndex returns the first known index from the Raft log.
